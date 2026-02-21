@@ -7,7 +7,52 @@ import { selectCoachingStrategy } from "@/lib/strategy";
 import { generateCoachingSentence } from "@/lib/claude-coaching";
 import { logCompletedAttempt } from "@/lib/analytics";
 import { modulateProvider } from "@/providers/modulate-provider";
-import type { AnalysisStatus, Transcript } from "@/types";
+import type {
+  AnalysisStatus,
+  Transcript,
+  VoiceAnalysisStartInput,
+} from "@/types";
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableProviderError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("internal server error") ||
+    normalized.includes("status 5") ||
+    normalized.includes("timed out") ||
+    normalized.includes("network") ||
+    normalized.includes("abort")
+  );
+}
+
+async function startAnalysisWithRetry(
+  input: VoiceAnalysisStartInput
+): Promise<{ providerJobId: string }> {
+  const maxAttempts = 2;
+  let lastError = "Failed to start analysis.";
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await modulateProvider.startAnalysis(input);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown provider error.";
+      lastError = message;
+
+      if (!isRetryableProviderError(message) || attempt === maxAttempts) {
+        break;
+      }
+
+      // Brief cool-down before one more full provider attempt.
+      await sleep(900 * attempt);
+    }
+  }
+
+  throw new Error(lastError);
+}
 
 function publishStatus(
   sessionId: string,
@@ -132,7 +177,7 @@ export async function POST(req: NextRequest) {
     const extension = inferExtension(safeMimeType);
     const fileName = normalizeFileName(audioFileName, attemptId, extension);
 
-    const { providerJobId } = await modulateProvider.startAnalysis({
+    const { providerJobId } = await startAnalysisWithRetry({
       sessionId,
       attemptId,
       scenarioId: session.scenarioId,

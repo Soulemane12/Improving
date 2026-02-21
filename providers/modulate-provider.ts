@@ -12,7 +12,7 @@ import { mapProviderEvent, normalizeSeverity } from "@/lib/normalization";
 const DEFAULT_API_BASE = "https://modulate-prototype-apis.com";
 const DEFAULT_BATCH_PATH = "/api/velma-2-stt-batch";
 const DEFAULT_TIMEOUT_MS = 90_000;
-const DEFAULT_MAX_RETRIES = 2;
+const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_BASE_MS = 700;
 
 type ProviderPayload = Record<string, unknown>;
@@ -705,10 +705,18 @@ export class ModulateProvider implements VoiceIntelligenceProvider {
     }
 
     const fileName = input.audioFileName ?? "recording.webm";
-    // Use a generic upload MIME type (same style as Modulate's provided Python sample),
-    // and rely on filename extension/container bytes for decoding.
+    // Prefer the normalized audio MIME type when available; keep
+    // application/octet-stream as a safe fallback.
+    const normalizedAudioMime =
+      typeof input.audioMimeType === "string"
+        ? input.audioMimeType.split(";")[0]?.trim().toLowerCase()
+        : "";
+    const uploadMimeType =
+      normalizedAudioMime && normalizedAudioMime.startsWith("audio/")
+        ? normalizedAudioMime
+        : "application/octet-stream";
     const uploadBlob = new Blob([input.audioBuffer], {
-      type: "application/octet-stream",
+      type: uploadMimeType,
     });
 
     const profiles = this.buildProfiles();
