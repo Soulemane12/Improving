@@ -36,6 +36,7 @@ type Action =
   | { type: "CONNECTED" }
   | { type: "DISCONNECTED" }
   | { type: "ERROR"; error: string }
+  | { type: "CLEAR" }
   | { type: "RESET" };
 
 const initialState: AnalysisState = {
@@ -109,6 +110,18 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
       return { ...state, connected: false };
     case "ERROR":
       return { ...state, error: action.error };
+    case "CLEAR":
+      return {
+        ...state,
+        status: "recording",
+        events: [],
+        transcript: null,
+        metrics: null,
+        strategy: null,
+        comparison: null,
+        coachingSentence: null,
+        error: null,
+      };
     case "RESET":
       return initialState;
     default:
@@ -219,9 +232,10 @@ export function useAnalysisStream(sessionId: string | null) {
   }, []);
 
   const reset = useCallback(() => {
-    disconnect();
-    dispatch({ type: "RESET" });
-  }, [disconnect]);
+    // Clear analysis state between runs but keep the current SSE connection.
+    // This is required when reusing the same session ID across attempts.
+    dispatch({ type: "CLEAR" });
+  }, []);
 
   // Auto-connect when sessionId changes
   useEffect(() => {
