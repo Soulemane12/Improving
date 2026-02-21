@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, type ChangeEvent } from "react";
+import { useState, useCallback, useRef, useEffect, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useAudioCapture } from "@/hooks/useAudioCapture";
 import { useWaveform } from "@/hooks/useWaveform";
@@ -26,6 +26,8 @@ export default function PracticePage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [isUploadingAudio, setIsUploadingAudio] = useState(false);
+  const [uploadedAudioPreviewUrl, setUploadedAudioPreviewUrl] = useState<string | null>(null);
+  const [uploadedAudioFileName, setUploadedAudioFileName] = useState<string | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const savedAttemptRef = useRef<string | null>(null);
@@ -35,6 +37,14 @@ export default function PracticePage() {
   const waveform = useWaveform(capture.stream);
   const analysis = useAnalysisStream(sessionId);
   const { runCount: totalRunCount, saveRun } = useRunHistory();
+
+  useEffect(() => {
+    return () => {
+      if (uploadedAudioPreviewUrl) {
+        URL.revokeObjectURL(uploadedAudioPreviewUrl);
+      }
+    };
+  }, [uploadedAudioPreviewUrl]);
 
   const parseErrorMessage = useCallback(
     async (res: Response, fallback: string): Promise<string> => {
@@ -160,9 +170,14 @@ export default function PracticePage() {
     (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (!file) return;
+      if (uploadedAudioPreviewUrl) {
+        URL.revokeObjectURL(uploadedAudioPreviewUrl);
+      }
+      setUploadedAudioPreviewUrl(URL.createObjectURL(file));
+      setUploadedAudioFileName(file.name);
       void handleUploadAudio(file);
     },
-    [handleUploadAudio]
+    [handleUploadAudio, uploadedAudioPreviewUrl]
   );
 
   const handleStop = useCallback(async () => {
@@ -245,6 +260,22 @@ export default function PracticePage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-8 flex flex-col gap-6">
+        {uploadedAudioPreviewUrl && (
+          <div className="p-4 rounded-xl bg-neutral-900 border border-neutral-800">
+            <p className="text-xs text-neutral-400 mb-2">
+              Uploaded Audio Preview{uploadedAudioFileName ? `: ${uploadedAudioFileName}` : ""}
+            </p>
+            <audio
+              controls
+              preload="metadata"
+              src={uploadedAudioPreviewUrl}
+              className="w-full"
+            >
+              Your browser does not support audio playback.
+            </audio>
+          </div>
+        )}
+
         {/* Phase: Pre-recording / Recording */}
         {(displayPhase === "pre-recording" || displayPhase === "recording") && (
           <>
@@ -354,6 +385,17 @@ export default function PracticePage() {
 
             {/* Run Comparison (shown on retry runs) */}
             <ComparisonDashboard comparison={analysis.comparison} />
+
+            {analysis.coachingSentence && (
+              <div className="p-4 rounded-xl bg-neutral-900 border border-neutral-800">
+                <div className="text-[10px] text-neutral-500 uppercase tracking-wider mb-2">
+                  Claude Feedback
+                </div>
+                <p className="text-sm text-neutral-200 leading-relaxed">
+                  {analysis.coachingSentence}
+                </p>
+              </div>
+            )}
 
             {/* Coaching Strategy */}
             <CoachingStrategy strategy={analysis.strategy} />

@@ -19,6 +19,7 @@ interface AnalysisState {
   metrics: AttemptMetrics | null;
   strategy: CoachingStrategyResult | null;
   comparison: RunComparison | null;
+  coachingSentence: string | null;
   connected: boolean;
   error: string | null;
 }
@@ -30,6 +31,7 @@ type Action =
   | { type: "METRICS"; metrics: AttemptMetrics }
   | { type: "STRATEGY"; strategy: CoachingStrategyResult }
   | { type: "COMPARISON"; comparison: RunComparison }
+  | { type: "COACHING_SENTENCE"; coachingSentence: string }
   | { type: "HYDRATE"; snapshot: OpeningCoachAnalysisResponse }
   | { type: "CONNECTED" }
   | { type: "DISCONNECTED" }
@@ -43,6 +45,7 @@ const initialState: AnalysisState = {
   metrics: null,
   strategy: null,
   comparison: null,
+  coachingSentence: null,
   connected: false,
   error: null,
 };
@@ -68,6 +71,8 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
       return { ...state, strategy: action.strategy };
     case "COMPARISON":
       return { ...state, comparison: action.comparison };
+    case "COACHING_SENTENCE":
+      return { ...state, coachingSentence: action.coachingSentence };
     case "HYDRATE":
       return {
         ...state,
@@ -96,6 +101,7 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
         metrics: action.snapshot.metrics ?? null,
         strategy: action.snapshot.strategy ?? null,
         comparison: action.snapshot.comparison ?? null,
+        coachingSentence: action.snapshot.coachingSentence ?? null,
       };
     case "CONNECTED":
       return { ...state, connected: true, error: null };
@@ -178,6 +184,14 @@ export function useAnalysisStream(sessionId: string | null) {
             dispatch({
               type: "COMPARISON",
               comparison: message.payload as RunComparison,
+            });
+            break;
+          case "coaching_sentence":
+            dispatch({
+              type: "COACHING_SENTENCE",
+              coachingSentence: String(
+                (message.payload as { sentence?: string })?.sentence ?? ""
+              ),
             });
             break;
         }

@@ -19,6 +19,7 @@ const voiceEvents = new Map<string, VoiceSignalEvent[]>(); // keyed by attemptId
 const transcripts = new Map<string, Transcript>(); // keyed by attemptId
 const metrics = new Map<string, AttemptMetrics>(); // keyed by attemptId
 const strategies = new Map<string, CoachingStrategyResult>(); // keyed by attemptId
+const coachingSentences = new Map<string, string>(); // keyed by attemptId
 const analysisStatuses = new Map<string, AnalysisStatus>(); // keyed by attemptId
 const comparisons = new Map<string, RunComparison>(); // keyed by attemptId
 const audioChunks = new Map<string, ArrayBuffer[]>(); // keyed by attemptId
@@ -40,6 +41,7 @@ export function createAttempt(attempt: Attempt): Attempt {
   attempts.set(attempt.id, attempt);
   voiceEvents.set(attempt.id, []);
   audioChunks.set(attempt.id, []);
+  coachingSentences.delete(attempt.id);
   analysisStatuses.set(attempt.id, "recording");
   return attempt;
 }
@@ -137,6 +139,14 @@ export function getStrategy(
   return strategies.get(attemptId);
 }
 
+export function setCoachingSentence(attemptId: string, sentence: string): void {
+  coachingSentences.set(attemptId, sentence);
+}
+
+export function getCoachingSentence(attemptId: string): string | undefined {
+  return coachingSentences.get(attemptId);
+}
+
 // ─── Comparison ──────────────────────────────────────────────────────────────
 
 export function setComparison(
@@ -200,6 +210,7 @@ export function getAnalysisResponse(
   const events = getVoiceEvents(attemptId);
   const m = getMetrics(attemptId);
   const strategy = getStrategy(attemptId);
+  const coachingSentence = getCoachingSentence(attemptId);
   const comparison = getComparison(attemptId);
 
   return {
@@ -207,6 +218,7 @@ export function getAnalysisResponse(
     attemptId,
     status,
     durationSec: attempt?.durationSec,
+    coachingSentence,
     transcript: transcript
       ? {
           fullText: transcript.fullText,

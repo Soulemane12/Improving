@@ -171,6 +171,7 @@ export interface OpeningCoachAnalysisResponse {
   attemptId: string;
   status: AnalysisStatus;
   durationSec?: number;
+  coachingSentence?: string;
   transcript?: {
     fullText: string;
     segments: Array<{
@@ -219,7 +220,8 @@ export type SSEEventType =
   | "transcript"
   | "metrics"
   | "strategy"
-  | "comparison";
+  | "comparison"
+  | "coaching_sentence";
 
 export interface SSEMessage {
   type: SSEEventType;

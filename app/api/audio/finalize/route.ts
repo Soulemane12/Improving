@@ -4,6 +4,7 @@ import { publish } from "@/lib/events";
 import { computeMetrics } from "@/lib/metrics";
 import { compareRuns } from "@/lib/comparison";
 import { selectCoachingStrategy } from "@/lib/strategy";
+import { generateCoachingSentence } from "@/lib/claude-coaching";
 import { logCompletedAttempt } from "@/lib/analytics";
 import { modulateProvider } from "@/providers/modulate-provider";
 import type { AnalysisStatus, Transcript } from "@/types";
@@ -223,6 +224,21 @@ export async function POST(req: NextRequest) {
       sessionId,
       attemptId,
       payload: strategy,
+    });
+
+    const coachingSentence = await generateCoachingSentence({
+      scenarioId: session.scenarioId,
+      targetDurationSec: session.targetDurationSec,
+      transcriptText: summary.transcript?.fullText ?? "",
+      metrics,
+      strategy,
+    });
+    store.setCoachingSentence(attemptId, coachingSentence);
+    publish(sessionId, {
+      type: "coaching_sentence",
+      sessionId,
+      attemptId,
+      payload: { sentence: coachingSentence },
     });
 
     publishStatus(sessionId, attemptId, "coaching_ready");
