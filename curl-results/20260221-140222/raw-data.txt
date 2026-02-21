@@ -1,0 +1,94 @@
+=== BAD META ===
+label=bad
+file_path=/Users/soulemanesow/Downloads/bad.mp3
+mime=audio/mpeg
+file_name=bad.mp3
+session_id=648d6bf6-bf93-434b-8660-ff5a07bf439f
+attempt_id=ca6893ff-dcf5-4545-b9b9-f8db24f1efaf
+session_http_code=200
+chunk_http_code=200
+finalize_http_code=200
+
+=== BAD /api/sessions HEADERS ===
+HTTP/1.1 200 OK
+vary: rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch
+content-type: application/json
+Date: Sat, 21 Feb 2026 19:02:23 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+Transfer-Encoding: chunked
+
+
+=== BAD /api/sessions BODY ===
+{"sessionId":"648d6bf6-bf93-434b-8660-ff5a07bf439f","session":{"id":"648d6bf6-bf93-434b-8660-ff5a07bf439f","scenarioId":"listing-opener","targetDurationSec":60,"status":"active","createdAt":"2026-02-21T19:02:23.352Z"}}
+=== BAD /api/audio/chunk HEADERS ===
+HTTP/1.1 200 OK
+vary: rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch
+content-type: application/json
+Date: Sat, 21 Feb 2026 19:02:23 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+Transfer-Encoding: chunked
+
+
+=== BAD /api/audio/chunk BODY ===
+{"ok":true}
+=== BAD /api/audio/finalize HEADERS ===
+HTTP/1.1 200 OK
+vary: rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch
+content-type: application/json
+Date: Sat, 21 Feb 2026 19:02:28 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+Transfer-Encoding: chunked
+
+
+=== BAD /api/audio/finalize BODY ===
+{"providerJobId":"modulate-a7749267-b18"}
+=== GOOD META ===
+label=good
+file_path=/Users/soulemanesow/Downloads/good.mp3
+mime=audio/mpeg
+file_name=good.mp3
+session_id=28de8557-fcba-4b45-9b5a-c8cedfeaea29
+attempt_id=cb7de5ad-f216-4d4e-8254-3bcf130938e6
+session_http_code=200
+chunk_http_code=200
+finalize_http_code=200
+
+=== GOOD /api/sessions HEADERS ===
+HTTP/1.1 200 OK
+vary: rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch
+content-type: application/json
+Date: Sat, 21 Feb 2026 19:02:28 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+Transfer-Encoding: chunked
+
+
+=== GOOD /api/sessions BODY ===
+{"sessionId":"28de8557-fcba-4b45-9b5a-c8cedfeaea29","session":{"id":"28de8557-fcba-4b45-9b5a-c8cedfeaea29","scenarioId":"listing-opener","targetDurationSec":60,"status":"active","createdAt":"2026-02-21T19:02:28.818Z"}}
+=== GOOD /api/audio/chunk HEADERS ===
+HTTP/1.1 200 OK
+vary: rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch
+content-type: application/json
+Date: Sat, 21 Feb 2026 19:02:28 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+Transfer-Encoding: chunked
+
+
+=== GOOD /api/audio/chunk BODY ===
+{"ok":true}
+=== GOOD /api/audio/finalize HEADERS ===
+HTTP/1.1 200 OK
+vary: rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch
+content-type: application/json
+Date: Sat, 21 Feb 2026 19:02:33 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+Transfer-Encoding: chunked
+
+
+=== GOOD /api/audio/finalize BODY ===
+{"providerJobId":"modulate-ec82014a-c11"}

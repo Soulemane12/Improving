@@ -7,7 +7,9 @@ import type {
   Transcript,
   AttemptMetrics,
   CoachingStrategyResult,
+  RunComparison,
   SSEMessage,
+  OpeningCoachAnalysisResponse,
 } from "@/types";
 
 interface AnalysisState {
@@ -16,6 +18,7 @@ interface AnalysisState {
   transcript: Transcript | null;
   metrics: AttemptMetrics | null;
   strategy: CoachingStrategyResult | null;
+  comparison: RunComparison | null;
   connected: boolean;
   error: string | null;
 }
@@ -26,6 +29,8 @@ type Action =
   | { type: "TRANSCRIPT"; transcript: Transcript }
   | { type: "METRICS"; metrics: AttemptMetrics }
   | { type: "STRATEGY"; strategy: CoachingStrategyResult }
+  | { type: "COMPARISON"; comparison: RunComparison }
+  | { type: "HYDRATE"; snapshot: OpeningCoachAnalysisResponse }
   | { type: "CONNECTED" }
   | { type: "DISCONNECTED" }
   | { type: "ERROR"; error: string }
@@ -37,6 +42,7 @@ const initialState: AnalysisState = {
   transcript: null,
   metrics: null,
   strategy: null,
+  comparison: null,
   connected: false,
   error: null,
 };
@@ -60,6 +66,37 @@ function reducer(state: AnalysisState, action: Action): AnalysisState {
       return { ...state, metrics: action.metrics };
     case "STRATEGY":
       return { ...state, strategy: action.strategy };
+    case "COMPARISON":
+      return { ...state, comparison: action.comparison };
+    case "HYDRATE":
+      return {
+        ...state,
+        status: action.snapshot.status,
+        events: action.snapshot.voiceSignals.map((signal) => ({
+          id: signal.id,
+          provider: "modulate",
+          sessionId: action.snapshot.sessionId,
+          attemptId: action.snapshot.attemptId,
+          tStartMs: signal.tStartMs,
+          tEndMs: signal.tEndMs,
+          type: signal.type,
+          severity: signal.severity,
+          score: signal.score,
+          note: signal.note,
+        })),
+        transcript: action.snapshot.transcript
+          ? {
+              fullText: action.snapshot.transcript.fullText,
+              segments: action.snapshot.transcript.segments.map((segment) => ({
+                ...segment,
+                speaker: undefined,
+              })),
+            }
+          : null,
+        metrics: action.snapshot.metrics ?? null,
+        strategy: action.snapshot.strategy ?? null,
+        comparison: action.snapshot.comparison ?? null,
+      };
     case "CONNECTED":
       return { ...state, connected: true, error: null };
     case "DISCONNECTED":
@@ -86,7 +123,22 @@ export function useAnalysisStream(sessionId: string | null) {
     const es = new EventSource(`/api/sessions/${sessionId}/stream`);
     eventSourceRef.current = es;
 
-    es.onopen = () => dispatch({ type: "CONNECTED" });
+    es.onopen = () => {
+      dispatch({ type: "CONNECTED" });
+      void (async () => {
+        try {
+          const snapshotRes = await fetch(`/api/sessions/${sessionId}/results`, {
+            cache: "no-store",
+          });
+          if (!snapshotRes.ok) return;
+          const snapshot =
+            (await snapshotRes.json()) as OpeningCoachAnalysisResponse;
+          dispatch({ type: "HYDRATE", snapshot });
+        } catch {
+          // Best-effort hydration, SSE remains primary transport.
+        }
+      })();
+    };
 
     es.onmessage = (e) => {
       try {
@@ -120,6 +172,12 @@ export function useAnalysisStream(sessionId: string | null) {
             dispatch({
               type: "STRATEGY",
               strategy: message.payload as CoachingStrategyResult,
+            });
+            break;
+          case "comparison":
+            dispatch({
+              type: "COMPARISON",
+              comparison: message.payload as RunComparison,
             });
             break;
         }

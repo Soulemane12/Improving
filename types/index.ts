@@ -107,6 +107,8 @@ export interface VoiceAnalysisStartInput {
   attemptId: string;
   userId?: string;
   scenarioId: string;
+  audioBuffer?: ArrayBuffer;
+  audioFileName?: string;
   audioUrl?: string;
   audioMimeType?: string;
   liveStreamRef?: string;
@@ -120,6 +122,37 @@ export interface VoiceAnalysisSummary {
   transcript?: Transcript;
   events: VoiceSignalEvent[];
   aggregateSignals?: Record<string, number>;
+}
+
+// ─── Run Comparison (Self-Improvement Loop) ────────────────────────────────
+
+export type MetricTrend = "improved" | "declined" | "stable";
+
+export interface MetricDelta {
+  previous: number;
+  current: number;
+  delta: number;
+  trend: MetricTrend;
+  label: string;
+}
+
+export interface RunComparison {
+  previousAttemptId: string;
+  currentAttemptId: string;
+  runNumber: number;
+  pace: MetricDelta;
+  clarity: MetricDelta;
+  confidence: MetricDelta;
+  timingCompliance: MetricDelta;
+  fillerRate: MetricDelta;
+  hookStrength: MetricDelta;
+  ctaStrength: MetricDelta;
+  stressIndex: MetricDelta;
+  overall: MetricDelta;
+  summary: string;
+  improvedCount: number;
+  declinedCount: number;
+  stableCount: number;
 }
 
 // ─── Coaching Strategy ──────────────────────────────────────────────────────
@@ -159,6 +192,23 @@ export interface OpeningCoachAnalysisResponse {
   }>;
   metrics?: AttemptMetrics;
   strategy?: CoachingStrategyResult;
+  comparison?: RunComparison;
+}
+
+// ─── Run History (localStorage persistence) ─────────────────────────────────
+
+export interface SavedRun {
+  attemptId: string;
+  sessionId: string;
+  runNumber: number;
+  metrics: AttemptMetrics;
+  strategy?: CoachingStrategyResult;
+  comparison?: RunComparison;
+  completedAt: string; // ISO timestamp
+}
+
+export interface RunHistory {
+  runs: SavedRun[];
 }
 
 // ─── SSE Event Types ────────────────────────────────────────────────────────
@@ -168,7 +218,8 @@ export type SSEEventType =
   | "voice_event"
   | "transcript"
   | "metrics"
-  | "strategy";
+  | "strategy"
+  | "comparison";
 
 export interface SSEMessage {
   type: SSEEventType;

@@ -1,0 +1,27 @@
+name: "voice_analytics"
+version: "1.0.0"
+config-version: 2
+
+profile: "voice_analytics"
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+vars:
+  voice_raw_schema: "public"
+
+models:
+  voice_analytics:
+    +persist_docs:
+      relation: true
+      columns: true
+    marts:
+      +materialized: view

@@ -1,0 +1,17 @@
+version: 2
+
+sources:
+  - name: voice_raw
+    description: "Raw analytics tables written by the Voice Coach app into Supabase."
+    schema: "{{ var('voice_raw_schema', 'public') }}"
+    tables:
+      - name: sessions
+        description: "Practice session envelope data."
+      - name: attempts
+        description: "Per-attempt execution and lifecycle status."
+      - name: attempt_metrics
+        description: "Computed coaching metrics for each attempt."
+      - name: coaching_strategies
+        description: "Selected strategy output for each attempt."
+      - name: run_comparisons
+        description: "Current run deltas relative to the previous run."

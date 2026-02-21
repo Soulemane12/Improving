@@ -5,6 +5,7 @@ import type {
   Transcript,
   AttemptMetrics,
   CoachingStrategyResult,
+  RunComparison,
   OpeningCoachAnalysisResponse,
   AnalysisStatus,
 } from "@/types";
@@ -19,6 +20,7 @@ const transcripts = new Map<string, Transcript>(); // keyed by attemptId
 const metrics = new Map<string, AttemptMetrics>(); // keyed by attemptId
 const strategies = new Map<string, CoachingStrategyResult>(); // keyed by attemptId
 const analysisStatuses = new Map<string, AnalysisStatus>(); // keyed by attemptId
+const comparisons = new Map<string, RunComparison>(); // keyed by attemptId
 const audioChunks = new Map<string, ArrayBuffer[]>(); // keyed by attemptId
 
 // ─── Sessions ───────────────────────────────────────────────────────────────
@@ -135,6 +137,42 @@ export function getStrategy(
   return strategies.get(attemptId);
 }
 
+// ─── Comparison ──────────────────────────────────────────────────────────────
+
+export function setComparison(
+  attemptId: string,
+  comparison: RunComparison
+): void {
+  comparisons.set(attemptId, comparison);
+}
+
+export function getComparison(attemptId: string): RunComparison | undefined {
+  return comparisons.get(attemptId);
+}
+
+/**
+ * Find the most recent completed attempt for this session that has metrics,
+ * excluding the current attempt. Returns the attempt + its metrics, or undefined.
+ */
+export function getPreviousCompletedAttemptWithMetrics(
+  sessionId: string,
+  excludeAttemptId: string
+): { attempt: Attempt; metrics: AttemptMetrics } | undefined {
+  const sessionAttempts = getAttemptsBySession(sessionId)
+    .filter(
+      (a) =>
+        a.id !== excludeAttemptId &&
+        (a.analysisStatus === "completed" || a.analysisStatus === "processing")
+    )
+    .sort((a, b) => b.runNumber - a.runNumber);
+
+  for (const attempt of sessionAttempts) {
+    const m = metrics.get(attempt.id);
+    if (m) return { attempt, metrics: m };
+  }
+  return undefined;
+}
+
 // ─── Analysis Status ────────────────────────────────────────────────────────
 
 export function setAnalysisStatus(
@@ -162,6 +200,7 @@ export function getAnalysisResponse(
   const events = getVoiceEvents(attemptId);
   const m = getMetrics(attemptId);
   const strategy = getStrategy(attemptId);
+  const comparison = getComparison(attemptId);
 
   return {
     sessionId,
@@ -191,5 +230,6 @@ export function getAnalysisResponse(
     })),
     metrics: m,
     strategy,
+    comparison,
   };
 }

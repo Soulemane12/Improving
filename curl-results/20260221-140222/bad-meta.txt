@@ -1,0 +1,9 @@
+label=bad
+file_path=/Users/soulemanesow/Downloads/bad.mp3
+mime=audio/mpeg
+file_name=bad.mp3
+session_id=648d6bf6-bf93-434b-8660-ff5a07bf439f
+attempt_id=ca6893ff-dcf5-4545-b9b9-f8db24f1efaf
+session_http_code=200
+chunk_http_code=200
+finalize_http_code=200

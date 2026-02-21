@@ -1,0 +1,13 @@
+voice_analytics:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('SUPABASE_DB_HOST', 'db.ostzgwdocrggpahykslh.supabase.co') }}"
+      user: "{{ env_var('SUPABASE_DB_USER', 'postgres') }}"
+      pass: "{{ env_var('SUPABASE_DB_PASSWORD') }}"
+      port: "{{ env_var('SUPABASE_DB_PORT', '5432') | int }}"
+      dbname: "{{ env_var('SUPABASE_DB_NAME', 'postgres') }}"
+      schema: "{{ env_var('SUPABASE_DBT_SCHEMA', 'analytics') }}"
+      threads: 4
+      sslmode: require

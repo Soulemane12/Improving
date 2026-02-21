@@ -4,6 +4,7 @@ import * as store from "@/lib/store";
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const attemptId = formData.get("attemptId") as string | null;
+  const sessionId = formData.get("sessionId") as string | null;
   const chunk = formData.get("chunk") as Blob | null;
 
   if (!attemptId || !chunk) {
@@ -13,16 +14,36 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const attempt = store.getAttempt(attemptId);
+  let attempt = store.getAttempt(attemptId);
   if (!attempt) {
-    return NextResponse.json(
-      { error: "Attempt not found" },
-      { status: 404 }
-    );
+    if (!sessionId) {
+      return NextResponse.json(
+        { error: "Attempt not found and sessionId missing" },
+        { status: 404 }
+      );
+    }
+
+    const session = store.getSession(sessionId);
+    if (!session) {
+      return NextResponse.json(
+        { error: "Session not found" },
+        { status: 404 }
+      );
+    }
+
+    const existingAttempts = store.getAttemptsBySession(sessionId);
+    attempt = store.createAttempt({
+      id: attemptId,
+      sessionId,
+      runNumber: existingAttempts.length + 1,
+      analysisStatus: "uploading",
+      createdAt: new Date().toISOString(),
+    });
   }
 
   const buffer = await chunk.arrayBuffer();
   store.addAudioChunk(attemptId, buffer);
+  store.updateAttempt(attemptId, { analysisStatus: "uploading" });
 
   return NextResponse.json({ ok: true });
 }

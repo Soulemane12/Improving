@@ -1,0 +1,287 @@
+version: 2
+
+models:
+  - name: fct_voice_attempts
+    description: >
+      Attempt-level fact table that cleans and enriches attempts with scenario context,
+      scoring metrics, strategy assignment, and run-over-run comparison deltas.
+    columns:
+      - name: attempt_id
+        description: "Primary key for each practice attempt."
+        tests:
+          - not_null
+          - unique
+      - name: session_id
+        description: "Session identifier that groups retries."
+      - name: user_id
+        description: "Optional end-user identifier from the session."
+      - name: scenario_id
+        description: "Practice scenario identifier."
+      - name: target_duration_sec
+        description: "Target speech duration in seconds."
+      - name: duration_context
+        description: "Duration bucket derived from target duration."
+      - name: run_number
+        description: "Nth attempt within the same session."
+      - name: run_context
+        description: "Run bucket for first/early/later attempts."
+      - name: analysis_status
+        description: "Attempt processing status from the app backend."
+      - name: attempt_created_at
+        description: "Attempt creation timestamp."
+        meta:
+          dimension:
+            type: timestamp
+      - name: attempt_date
+        description: "Attempt day."
+        meta:
+          dimension:
+            type: date
+      - name: attempt_week
+        description: "Week bucket for trend reporting."
+        meta:
+          dimension:
+            type: date
+      - name: duration_sec
+        description: "Measured attempt duration in seconds."
+      - name: is_completed
+        description: "True when attempt reached completed state."
+      - name: completed_flag
+        description: "1 for completed attempts, else 0."
+      - name: overall_score
+        description: "Composite coaching score."
+      - name: pacing_score
+        description: "Pacing quality score."
+      - name: confidence_score
+        description: "Confidence quality score."
+      - name: clarity_score
+        description: "Clarity quality score."
+      - name: timing_compliance_score
+        description: "Timing compliance score."
+      - name: hook_strength_score
+        description: "Opening hook strength score."
+      - name: cta_strength_score
+        description: "Closing CTA strength score."
+      - name: filler_rate_per_min
+        description: "Filler words per minute."
+      - name: stress_index
+        description: "Stress index (0-1, lower is better)."
+      - name: strategy_id
+        description: "Strategy identifier selected by coaching logic."
+      - name: strategy_label
+        description: "Human-readable strategy label."
+      - name: strategy_description
+        description: "Strategy description."
+      - name: strategy_reason
+        description: "Why that strategy was selected."
+      - name: has_comparison
+        description: "True when comparison to previous run exists."
+      - name: compared_flag
+        description: "1 when comparison data exists, else 0."
+      - name: previous_attempt_id
+        description: "Previous attempt used as comparison baseline."
+      - name: improved_count
+        description: "Count of improved metrics in comparison."
+      - name: declined_count
+        description: "Count of declined metrics in comparison."
+      - name: stable_count
+        description: "Count of stable metrics in comparison."
+      - name: net_improved_count
+        description: "Improved minus declined metric count."
+      - name: comparison_outcome
+        description: "Overall comparison label (improved/declined/stable/not_compared)."
+      - name: improved_outcome_flag
+        description: "1 when comparison outcome is improved, else 0."
+      - name: overall_delta
+        description: "Overall score delta vs previous attempt."
+      - name: pacing_delta
+        description: "Pacing score delta vs previous attempt."
+      - name: confidence_delta
+        description: "Confidence score delta vs previous attempt."
+      - name: clarity_delta
+        description: "Clarity score delta vs previous attempt."
+      - name: timing_delta
+        description: "Timing score delta vs previous attempt."
+      - name: filler_rate_delta
+        description: "Filler rate delta vs previous attempt."
+      - name: hook_strength_delta
+        description: "Hook strength delta vs previous attempt."
+      - name: cta_strength_delta
+        description: "CTA strength delta vs previous attempt."
+      - name: stress_index_delta
+        description: "Stress index delta vs previous attempt."
+    meta:
+      metrics:
+        attempts:
+          type: count_distinct
+          sql: ${attempt_id}
+          label: Attempts
+        completed_attempts:
+          type: sum
+          sql: ${completed_flag}
+          label: Completed Attempts
+        completion_rate:
+          type: average
+          sql: ${completed_flag}
+          label: Completion Rate
+        attempts_with_comparison:
+          type: sum
+          sql: ${compared_flag}
+          label: Attempts With Comparison
+        comparison_coverage_rate:
+          type: average
+          sql: ${compared_flag}
+          label: Comparison Coverage Rate
+        improved_outcome_rate:
+          type: average
+          sql: ${improved_outcome_flag}
+          label: Improved Outcome Rate
+        avg_overall_score:
+          type: average
+          sql: ${overall_score}
+          label: Avg Overall Score
+        avg_pacing_score:
+          type: average
+          sql: ${pacing_score}
+          label: Avg Pacing Score
+        avg_confidence_score:
+          type: average
+          sql: ${confidence_score}
+          label: Avg Confidence Score
+        avg_clarity_score:
+          type: average
+          sql: ${clarity_score}
+          label: Avg Clarity Score
+        avg_timing_score:
+          type: average
+          sql: ${timing_compliance_score}
+          label: Avg Timing Score
+        avg_hook_strength_score:
+          type: average
+          sql: ${hook_strength_score}
+          label: Avg Hook Strength Score
+        avg_cta_strength_score:
+          type: average
+          sql: ${cta_strength_score}
+          label: Avg CTA Strength Score
+        avg_filler_rate_per_min:
+          type: average
+          sql: ${filler_rate_per_min}
+          label: Avg Filler Rate / Min
+        avg_stress_index:
+          type: average
+          sql: ${stress_index}
+          label: Avg Stress Index
+        avg_net_improved_count:
+          type: average
+          sql: ${net_improved_count}
+          label: Avg Net Improved Metrics
+        avg_overall_delta:
+          type: average
+          sql: ${overall_delta}
+          label: Avg Overall Delta
+
+  - name: fct_strategy_effectiveness
+    description: >
+      Strategy-by-context weekly aggregate that tracks completion, quality scores,
+      run-over-run deltas, and a composite reward score for strategy evaluation.
+    columns:
+      - name: strategy_id
+        description: "Strategy identifier."
+      - name: strategy_label
+        description: "Human-readable strategy label."
+      - name: scenario_id
+        description: "Scenario context."
+      - name: target_duration_sec
+        description: "Target duration context."
+      - name: duration_context
+        description: "Duration bucket context."
+      - name: run_context
+        description: "Run-stage context bucket."
+      - name: attempt_week
+        description: "Week bucket."
+        meta:
+          dimension:
+            type: date
+      - name: attempts_total
+        description: "Total attempts in this strategy/context bucket."
+      - name: attempts_completed
+        description: "Completed attempts in this strategy/context bucket."
+      - name: attempts_with_comparison
+        description: "Attempts with comparison data in this bucket."
+      - name: completion_rate
+        description: "Share of attempts completed."
+      - name: comparison_coverage_rate
+        description: "Share of attempts with comparison data."
+      - name: avg_overall_score
+        description: "Average overall score."
+      - name: avg_pacing_score
+        description: "Average pacing score."
+      - name: avg_confidence_score
+        description: "Average confidence score."
+      - name: avg_clarity_score
+        description: "Average clarity score."
+      - name: avg_timing_score
+        description: "Average timing score."
+      - name: avg_hook_strength_score
+        description: "Average hook score."
+      - name: avg_cta_strength_score
+        description: "Average CTA score."
+      - name: avg_filler_rate_per_min
+        description: "Average filler rate per minute."
+      - name: avg_stress_index
+        description: "Average stress index."
+      - name: avg_net_improved_count
+        description: "Average net improved metric count."
+      - name: avg_overall_delta
+        description: "Average overall delta."
+      - name: avg_pacing_delta
+        description: "Average pacing delta."
+      - name: avg_confidence_delta
+        description: "Average confidence delta."
+      - name: avg_clarity_delta
+        description: "Average clarity delta."
+      - name: avg_timing_delta
+        description: "Average timing delta."
+      - name: avg_filler_rate_delta
+        description: "Average filler rate delta."
+      - name: avg_hook_strength_delta
+        description: "Average hook strength delta."
+      - name: avg_cta_strength_delta
+        description: "Average CTA strength delta."
+      - name: avg_stress_index_delta
+        description: "Average stress index delta."
+      - name: strategy_win_rate
+        description: "Share of compared attempts with improved outcome."
+      - name: strategy_reward_score
+        description: "Composite reward score for strategy selection quality."
+    meta:
+      metrics:
+        strategy_rows:
+          type: count
+          sql: ${strategy_id}
+          label: Strategy Context Rows
+        total_attempts:
+          type: sum
+          sql: ${attempts_total}
+          label: Attempts
+        total_completed_attempts:
+          type: sum
+          sql: ${attempts_completed}
+          label: Completed Attempts
+        avg_completion_rate:
+          type: average
+          sql: ${completion_rate}
+          label: Avg Completion Rate
+        avg_strategy_win_rate:
+          type: average
+          sql: ${strategy_win_rate}
+          label: Avg Strategy Win Rate
+        avg_strategy_reward_score:
+          type: average
+          sql: ${strategy_reward_score}
+          label: Avg Strategy Reward Score
+        mean_overall_delta:
+          type: average
+          sql: ${avg_overall_delta}
+          label: Avg Overall Delta
