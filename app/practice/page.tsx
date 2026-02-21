@@ -42,6 +42,30 @@ export default function PracticePage() {
   const { runCount: totalRunCount, saveRun } = useRunHistory();
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const storedConsent = window.localStorage.getItem("voice-mic-consent");
+    if (storedConsent === "granted") {
+      setHasConsented(true);
+    }
+
+    // If browser already has mic permission, reflect that in UI.
+    if (navigator.permissions?.query) {
+      void navigator.permissions
+        .query({ name: "microphone" as PermissionName })
+        .then((result) => {
+          if (result.state === "granted") {
+            setHasConsented(true);
+            window.localStorage.setItem("voice-mic-consent", "granted");
+          }
+        })
+        .catch(() => {
+          // Best-effort only.
+        });
+    }
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (uploadedAudioPreviewUrl) {
         URL.revokeObjectURL(uploadedAudioPreviewUrl);
@@ -62,6 +86,11 @@ export default function PracticePage() {
     },
     []
   );
+
+  const logClientError = useCallback((context: string, error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.log(`[practice] ${context}: ${message}`, error);
+  }, []);
 
   const createSessionAndAttempt = useCallback(async (existingSessionId?: string | null) => {
     let newSessionId: string;
@@ -97,6 +126,9 @@ export default function PracticePage() {
 
   const handleConsent = useCallback(() => {
     setHasConsented(true);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("voice-mic-consent", "granted");
+    }
   }, []);
 
   const handleStart = useCallback(async () => {
@@ -110,15 +142,27 @@ export default function PracticePage() {
       }
       await createSessionAndAttempt(sessionId);
 
-      // Start recording. We upload one finalized blob on stop for reliability.
+      // Start recording. Upload only the finalized blob on stop to avoid
+      // duplicate/corrupted multipart WebM concatenation.
       await capture.start();
+      setHasConsented(true);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("voice-mic-consent", "granted");
+      }
 
       setPhase("recording");
     } catch (error) {
-      console.error("Could not start recording session:", error);
+      logClientError("could not start recording session", error);
       setPhase("pre-recording");
     }
-  }, [analysis, capture, createSessionAndAttempt, sessionId, uploadedAudioPreviewUrl]);
+  }, [
+    analysis,
+    capture,
+    createSessionAndAttempt,
+    sessionId,
+    uploadedAudioPreviewUrl,
+    logClientError,
+  ]);
 
   const handleUploadAudio = useCallback(
     async (file: File) => {
@@ -160,7 +204,7 @@ export default function PracticePage() {
           );
         }
       } catch (error) {
-        console.error("Audio upload failed:", error);
+        logClientError("audio upload failed", error);
         setUploadError(
           error instanceof Error
             ? error.message
@@ -172,7 +216,7 @@ export default function PracticePage() {
         if (uploadInputRef.current) uploadInputRef.current.value = "";
       }
     },
-    [analysis, createSessionAndAttempt, parseErrorMessage, sessionId]
+    [analysis, createSessionAndAttempt, parseErrorMessage, sessionId, logClientError]
   );
 
   const handleUploadInputChange = useCallback(
@@ -243,7 +287,7 @@ export default function PracticePage() {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Failed to start analysis.";
-      console.error("Finalize request failed:", errorMessage);
+      console.log("[practice] finalize request failed:", errorMessage, error);
       setUploadError(errorMessage);
       setPhase("pre-recording");
     }

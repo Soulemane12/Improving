@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { unlink, writeFile, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import * as store from "@/lib/store";
 import { publish } from "@/lib/events";
 import { computeMetrics } from "@/lib/metrics";
@@ -12,6 +18,8 @@ import type {
   Transcript,
   VoiceAnalysisStartInput,
 } from "@/types";
+
+const execFileAsync = promisify(execFile);
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -52,6 +60,54 @@ async function startAnalysisWithRetry(
   }
 
   throw new Error(lastError);
+}
+
+function toArrayBuffer(buffer: Buffer): ArrayBuffer {
+  return buffer.buffer.slice(
+    buffer.byteOffset,
+    buffer.byteOffset + buffer.byteLength
+  );
+}
+
+function canRetryWithTranscode(audioMimeType: string, errorMessage: string): boolean {
+  const mime = audioMimeType.toLowerCase();
+  const retryableMime =
+    mime.includes("webm") || mime.includes("ogg") || mime.includes("opus");
+  const retryableError =
+    errorMessage.toLowerCase().includes("internal server error") ||
+    errorMessage.toLowerCase().includes("status 5");
+  return retryableMime && retryableError;
+}
+
+async function transcodeToWav(audioBuffer: ArrayBuffer, inputExtension: string) {
+  const id = randomUUID();
+  const inPath = join(tmpdir(), `voice-in-${id}.${inputExtension || "bin"}`);
+  const outPath = join(tmpdir(), `voice-out-${id}.wav`);
+
+  try {
+    await writeFile(inPath, Buffer.from(audioBuffer));
+    await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-y",
+      "-i",
+      inPath,
+      "-ar",
+      "16000",
+      "-ac",
+      "1",
+      "-c:a",
+      "pcm_s16le",
+      outPath,
+    ]);
+
+    const wav = await readFile(outPath);
+    return toArrayBuffer(wav);
+  } finally {
+    await unlink(inPath).catch(() => {});
+    await unlink(outPath).catch(() => {});
+  }
 }
 
 function publishStatus(
@@ -176,8 +232,7 @@ export async function POST(req: NextRequest) {
         : "audio/webm;codecs=opus";
     const extension = inferExtension(safeMimeType);
     const fileName = normalizeFileName(audioFileName, attemptId, extension);
-
-    const { providerJobId } = await startAnalysisWithRetry({
+    const baseInput: VoiceAnalysisStartInput = {
       sessionId,
       attemptId,
       scenarioId: session.scenarioId,
@@ -185,7 +240,38 @@ export async function POST(req: NextRequest) {
       audioFileName: fileName,
       audioMimeType: safeMimeType,
       metadata: { targetDurationSec: session.targetDurationSec },
-    });
+    };
+
+    let providerJobId: string;
+    try {
+      providerJobId = (await startAnalysisWithRetry(baseInput)).providerJobId;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown provider error.";
+
+      if (!canRetryWithTranscode(safeMimeType, message)) {
+        throw error;
+      }
+
+      console.log("[api/audio/finalize] retrying with ffmpeg wav transcode", {
+        sessionId,
+        attemptId,
+        originalMime: safeMimeType,
+        reason: message,
+      });
+
+      const wavBuffer = await transcodeToWav(mergedAudio, extension);
+      const wavFileName = normalizeFileName(audioFileName, attemptId, "wav");
+
+      providerJobId = (
+        await startAnalysisWithRetry({
+          ...baseInput,
+          audioBuffer: wavBuffer,
+          audioMimeType: "audio/wav",
+          audioFileName: wavFileName,
+        })
+      ).providerJobId;
+    }
 
     store.updateAttempt(attemptId, { providerJobId, analysisStatus: "processing" });
     publishStatus(sessionId, attemptId, "extracting_voice_signals");
@@ -306,6 +392,11 @@ export async function POST(req: NextRequest) {
     const message =
       error instanceof Error ? error.message : "Failed to analyze audio.";
     console.error("Finalize analysis failed:", error);
+    console.log("[api/audio/finalize] failure", {
+      sessionId,
+      attemptId,
+      message,
+    });
     store.updateAttempt(attemptId, { analysisStatus: "failed" });
     return NextResponse.json({ error: message }, { status: 502 });
   } finally {
