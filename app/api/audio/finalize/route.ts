@@ -229,10 +229,11 @@ export async function POST(req: NextRequest) {
     store.updateAttempt(attemptId, { analysisStatus: "completed" });
 
     // Fire-and-forget: log to Supabase analytics pipeline (never blocks response)
+    const latestAttempt = store.getAttempt(attemptId) ?? attempt;
     const comparison = store.getComparison(attemptId);
     void logCompletedAttempt({
       session,
-      attempt,
+      attempt: latestAttempt,
       metrics,
       events: summary.events,
       strategy,
