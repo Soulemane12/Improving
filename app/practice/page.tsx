@@ -28,6 +28,7 @@ export default function PracticePage() {
   const [isUploadingAudio, setIsUploadingAudio] = useState(false);
   const [uploadedAudioPreviewUrl, setUploadedAudioPreviewUrl] = useState<string | null>(null);
   const [uploadedAudioFileName, setUploadedAudioFileName] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const savedAttemptRef = useRef<string | null>(null);
@@ -120,10 +121,11 @@ export default function PracticePage() {
   const handleUploadAudio = useCallback(
     async (file: File) => {
       setIsUploadingAudio(true);
+      setUploadError(null);
+      setPhase("processing");
       try {
         analysis.reset();
         const { newSessionId, newAttemptId } = await createSessionAndAttempt(sessionId);
-        setPhase("processing");
 
         const uploadFormData = new FormData();
         uploadFormData.append("attemptId", newAttemptId);
@@ -157,6 +159,11 @@ export default function PracticePage() {
         }
       } catch (error) {
         console.error("Audio upload failed:", error);
+        setUploadError(
+          error instanceof Error
+            ? error.message
+            : "Failed to process uploaded audio."
+        );
         setPhase("pre-recording");
       } finally {
         setIsUploadingAudio(false);
@@ -175,6 +182,8 @@ export default function PracticePage() {
       }
       setUploadedAudioPreviewUrl(URL.createObjectURL(file));
       setUploadedAudioFileName(file.name);
+      setUploadError(null);
+      setPhase("processing");
       void handleUploadAudio(file);
     },
     [handleUploadAudio, uploadedAudioPreviewUrl]
@@ -273,6 +282,9 @@ export default function PracticePage() {
             >
               Your browser does not support audio playback.
             </audio>
+            {uploadError && (
+              <p className="text-xs text-red-400 mt-3">{uploadError}</p>
+            )}
           </div>
         )}
 
