@@ -1,0 +1,171 @@
+"use client";
+
+import { useEffect, useRef, useReducer, useCallback } from "react";
+import type {
+  AnalysisStatus,
+  VoiceSignalEvent,
+  Transcript,
+  AttemptMetrics,
+  CoachingStrategyResult,
+  SSEMessage,
+} from "@/types";
+
+interface AnalysisState {
+  status: AnalysisStatus;
+  events: VoiceSignalEvent[];
+  transcript: Transcript | null;
+  metrics: AttemptMetrics | null;
+  strategy: CoachingStrategyResult | null;
+  connected: boolean;
+  error: string | null;
+}
+
+type Action =
+  | { type: "STATUS_CHANGE"; status: AnalysisStatus }
+  | { type: "VOICE_EVENT"; event: VoiceSignalEvent }
+  | { type: "TRANSCRIPT"; transcript: Transcript }
+  | { type: "METRICS"; metrics: AttemptMetrics }
+  | { type: "STRATEGY"; strategy: CoachingStrategyResult }
+  | { type: "CONNECTED" }
+  | { type: "DISCONNECTED" }
+  | { type: "ERROR"; error: string }
+  | { type: "RESET" };
+
+const initialState: AnalysisState = {
+  status: "recording",
+  events: [],
+  transcript: null,
+  metrics: null,
+  strategy: null,
+  connected: false,
+  error: null,
+};
+
+function reducer(state: AnalysisState, action: Action): AnalysisState {
+  switch (action.type) {
+    case "STATUS_CHANGE":
+      return { ...state, status: action.status };
+    case "VOICE_EVENT":
+      // Idempotent: don't duplicate events
+      if (state.events.some((e) => e.id === action.event.id)) return state;
+      return {
+        ...state,
+        events: [...state.events, action.event].sort(
+          (a, b) => a.tStartMs - b.tStartMs
+        ),
+      };
+    case "TRANSCRIPT":
+      return { ...state, transcript: action.transcript };
+    case "METRICS":
+      return { ...state, metrics: action.metrics };
+    case "STRATEGY":
+      return { ...state, strategy: action.strategy };
+    case "CONNECTED":
+      return { ...state, connected: true, error: null };
+    case "DISCONNECTED":
+      return { ...state, connected: false };
+    case "ERROR":
+      return { ...state, error: action.error };
+    case "RESET":
+      return initialState;
+    default:
+      return state;
+  }
+}
+
+export function useAnalysisStream(sessionId: string | null) {
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const eventSourceRef = useRef<EventSource | null>(null);
+
+  const connect = useCallback(() => {
+    if (!sessionId) return;
+
+    // Close existing connection
+    eventSourceRef.current?.close();
+
+    const es = new EventSource(`/api/sessions/${sessionId}/stream`);
+    eventSourceRef.current = es;
+
+    es.onopen = () => dispatch({ type: "CONNECTED" });
+
+    es.onmessage = (e) => {
+      try {
+        const message: SSEMessage = JSON.parse(e.data);
+
+        switch (message.type) {
+          case "status_change": {
+            const payload = message.payload as { status: AnalysisStatus };
+            dispatch({ type: "STATUS_CHANGE", status: payload.status });
+            break;
+          }
+          case "voice_event":
+            dispatch({
+              type: "VOICE_EVENT",
+              event: message.payload as VoiceSignalEvent,
+            });
+            break;
+          case "transcript":
+            dispatch({
+              type: "TRANSCRIPT",
+              transcript: message.payload as Transcript,
+            });
+            break;
+          case "metrics":
+            dispatch({
+              type: "METRICS",
+              metrics: message.payload as AttemptMetrics,
+            });
+            break;
+          case "strategy":
+            dispatch({
+              type: "STRATEGY",
+              strategy: message.payload as CoachingStrategyResult,
+            });
+            break;
+        }
+      } catch (err) {
+        console.error("Failed to parse SSE message:", err);
+      }
+    };
+
+    es.onerror = () => {
+      dispatch({ type: "DISCONNECTED" });
+      // Auto-reconnect after 2s (EventSource reconnects automatically,
+      // but we track the state)
+      setTimeout(() => {
+        if (eventSourceRef.current === es) {
+          dispatch({ type: "ERROR", error: "Connection lost, reconnecting..." });
+        }
+      }, 2000);
+    };
+  }, [sessionId]);
+
+  const disconnect = useCallback(() => {
+    eventSourceRef.current?.close();
+    eventSourceRef.current = null;
+    dispatch({ type: "DISCONNECTED" });
+  }, []);
+
+  const reset = useCallback(() => {
+    disconnect();
+    dispatch({ type: "RESET" });
+  }, [disconnect]);
+
+  // Auto-connect when sessionId changes
+  useEffect(() => {
+    if (sessionId) {
+      connect();
+    }
+    return () => {
+      eventSourceRef.current?.close();
+      eventSourceRef.current = null;
+    };
+  }, [sessionId, connect]);
+
+  return {
+    ...state,
+    connect,
+    disconnect,
+    reset,
+  };
+}
