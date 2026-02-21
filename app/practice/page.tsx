@@ -33,6 +33,8 @@ export default function PracticePage() {
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const savedAttemptRef = useRef<string | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const activeSessionIdRef = useRef<string | null>(null);
+  const activeAttemptIdRef = useRef<string | null>(null);
 
   const capture = useAudioCapture();
   const waveform = useWaveform(capture.stream);
@@ -86,6 +88,8 @@ export default function PracticePage() {
     const newAttemptId = crypto.randomUUID();
     setSessionId(newSessionId);
     setAttemptId(newAttemptId);
+    activeSessionIdRef.current = newSessionId;
+    activeAttemptIdRef.current = newAttemptId;
     setSelectedEventId(null);
     setSelectedSegmentId(null);
     return { newSessionId, newAttemptId };
@@ -98,25 +102,23 @@ export default function PracticePage() {
   const handleStart = useCallback(async () => {
     try {
       analysis.reset();
-      const { newSessionId, newAttemptId } = await createSessionAndAttempt(sessionId);
+      setUploadError(null);
+      if (uploadedAudioPreviewUrl) {
+        URL.revokeObjectURL(uploadedAudioPreviewUrl);
+        setUploadedAudioPreviewUrl(null);
+        setUploadedAudioFileName(null);
+      }
+      await createSessionAndAttempt(sessionId);
 
-      // Start recording
-      await capture.start(async (chunk) => {
-        const formData = new FormData();
-        formData.append("attemptId", newAttemptId);
-        formData.append("sessionId", newSessionId);
-        formData.append("chunk", chunk);
-        await fetch("/api/audio/chunk", { method: "POST", body: formData }).catch(
-          () => {}
-        );
-      });
+      // Start recording. We upload one finalized blob on stop for reliability.
+      await capture.start();
 
       setPhase("recording");
     } catch (error) {
       console.error("Could not start recording session:", error);
       setPhase("pre-recording");
     }
-  }, [analysis, capture, createSessionAndAttempt, sessionId]);
+  }, [analysis, capture, createSessionAndAttempt, sessionId, uploadedAudioPreviewUrl]);
 
   const handleUploadAudio = useCallback(
     async (file: File) => {
@@ -190,35 +192,62 @@ export default function PracticePage() {
   );
 
   const handleStop = useCallback(async () => {
-    const blob = await capture.stop();
-    if (!blob || !sessionId || !attemptId) return;
-
     setPhase("processing");
+    setUploadError(null);
+    try {
+      const blob = await capture.stop();
+      const finalizedSessionId = activeSessionIdRef.current ?? sessionId;
+      const finalizedAttemptId = activeAttemptIdRef.current ?? attemptId;
 
-    // Finalize upload and start analysis
-    const res = await fetch("/api/audio/finalize", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId,
-        attemptId,
-        audioMimeType: blob.type,
-      }),
-    });
-
-    if (!res.ok) {
-      let errorMessage = "Failed to start analysis.";
-      try {
-        const payload = (await res.json()) as { error?: string };
-        if (payload?.error) errorMessage = payload.error;
-      } catch {
-        const text = await res.text().catch(() => "");
-        if (text) errorMessage = text;
+      if (!blob || blob.size === 0) {
+        throw new Error("No recorded audio captured.");
       }
+      if (!finalizedSessionId || !finalizedAttemptId) {
+        throw new Error("Missing active session/attempt for recording.");
+      }
+
+      const uploadFormData = new FormData();
+      uploadFormData.append("attemptId", finalizedAttemptId);
+      uploadFormData.append("sessionId", finalizedSessionId);
+      uploadFormData.append(
+        "chunk",
+        blob,
+        `attempt-${finalizedAttemptId}.${blob.type.includes("wav") ? "wav" : "webm"}`
+      );
+
+      const uploadRes = await fetch("/api/audio/chunk", {
+        method: "POST",
+        body: uploadFormData,
+      });
+      if (!uploadRes.ok) {
+        throw new Error(
+          await parseErrorMessage(uploadRes, "Failed to upload recorded audio.")
+        );
+      }
+
+      const res = await fetch("/api/audio/finalize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: finalizedSessionId,
+          attemptId: finalizedAttemptId,
+          audioMimeType: blob.type,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(
+          await parseErrorMessage(res, "Failed to start analysis.")
+        );
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to start analysis.";
       console.error("Finalize request failed:", errorMessage);
+      setUploadError(errorMessage);
       setPhase("pre-recording");
     }
-  }, [capture, sessionId, attemptId]);
+  }, [capture, sessionId, attemptId, parseErrorMessage]);
 
   // Derive display phase: auto-transition to results when coaching is ready
   const displayPhase =
@@ -322,6 +351,9 @@ export default function PracticePage() {
               hasConsented={hasConsented}
               onConsent={handleConsent}
             />
+            {uploadError && !uploadedAudioPreviewUrl && (
+              <p className="text-xs text-red-400 text-center">{uploadError}</p>
+            )}
 
             <div className="flex flex-col items-center gap-2">
               <input
@@ -401,7 +433,7 @@ export default function PracticePage() {
             {analysis.coachingSentence && (
               <div className="p-4 rounded-xl bg-neutral-900 border border-neutral-800">
                 <div className="text-[10px] text-neutral-500 uppercase tracking-wider mb-2">
-                  Claude Feedback
+                  Airia Feedback
                 </div>
                 <p className="text-sm text-neutral-200 leading-relaxed">
                   {analysis.coachingSentence}

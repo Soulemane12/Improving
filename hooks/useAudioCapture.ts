@@ -65,7 +65,10 @@ export function useAudioCapture() {
     if (!recorder) return null;
 
     return new Promise((resolve) => {
-      recorder.onstop = () => {
+      let done = false;
+      const finalize = () => {
+        if (done) return;
+        done = true;
         if (timerRef.current) clearInterval(timerRef.current);
         timerRef.current = null;
         setState("stopped");
@@ -81,7 +84,32 @@ export function useAudioCapture() {
         resolve(blob);
       };
 
-      recorder.stop();
+      const timeout = setTimeout(finalize, 1500);
+      recorder.onstop = () => {
+        clearTimeout(timeout);
+        finalize();
+      };
+
+      // If the recorder is already inactive, finalize immediately.
+      if (recorder.state === "inactive") {
+        clearTimeout(timeout);
+        finalize();
+        return;
+      }
+
+      try {
+        // Flush the latest buffered audio before stopping.
+        recorder.requestData();
+      } catch {
+        // Ignore if unsupported by browser/runtime.
+      }
+
+      try {
+        recorder.stop();
+      } catch {
+        clearTimeout(timeout);
+        finalize();
+      }
     });
   }, []);
 
